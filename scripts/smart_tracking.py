@@ -1,14 +1,17 @@
 import cv2
 import numpy as np
+import os
 import torch
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from ultralytics import YOLO
-from model_tiny import BallRefinerNet  # Import mạng đã định nghĩa
+from model.model_tiny import BallRefinerNet  # Import mạng đã định nghĩa
 import torchvision.transforms as transforms
 
 # --- CẤU HÌNH ---
-VIDEO_PATH = "video_bong_da.mp4"
+VIDEO_PATH = "input/video_bong_da.mp4"
 YOLO_MODEL = "yolov8x.pt"  # Hoặc model bạn đã train
-TINY_MODEL = "tiny_ball_refiner.pth"  # Model tiny đã train xong
+TINY_MODEL = "model/tiny_ball_refiner.pth"  # Model tiny đã train xong
 CROP_SIZE = 64
 CONF_THRESH = 0.8  # Độ tin cậy của Tiny-Net
 

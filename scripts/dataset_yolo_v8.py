@@ -3,7 +3,7 @@ import configparser
 from tqdm import tqdm
 
 # --- CẤU HÌNH ---
-DATA_ROOT = r"D:\football_obtracking\path\to\SoccerNet\tracking-2023"  # Sửa đường dẫn của bạn
+DATA_ROOT = r"C:\Users\DungLe\Documents\GitHub\football_heatmap\SoccerNet"  # Sửa đường dẫn của bạn
 PHASES = ["train", "test"]
 
 # NGƯỠNG KÍCH THƯỚC (QUAN TRỌNG)

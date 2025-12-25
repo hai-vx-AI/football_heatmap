@@ -5,10 +5,10 @@ import glob
 from tqdm import tqdm
 
 # --- CẤU HÌNH ---
-DATA_ROOT = r"D:\football_obtracking\path\to\SoccerNet\tracking-2023"  # Folder chứa images và labels
-SAVE_DIR = "tiny_dataset"
+DATA_ROOT = r"C:\Users\DungLe\Documents\GitHub\football_heatmap\input\SoccerNet\yolo_format"  # Folder chứa images và labels
+SAVE_DIR = "../input/tiny_dataset"
 CROP_SIZE = 64
-BALL_CLASS_ID = 1  # ID của bóng trong file label mới
+BALL_CLASS_ID = 0  # ID của objects trong file label (all objects for now)
 
 
 def crop_data():

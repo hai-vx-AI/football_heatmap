@@ -13,7 +13,7 @@ from tqdm import tqdm
 BATCH_SIZE = 32
 EPOCHS = 10
 LR = 0.001
-DATA_DIR = "tiny_dataset"
+DATA_DIR = "../input/tiny_dataset"
 SAVE_PATH = "tiny_ball_refiner.pth"
 
 
@@ -41,6 +41,8 @@ class TinyDataset(Dataset):
     def __getitem__(self, idx):
         path, conf, dx, dy = self.samples[idx]
         img = cv2.imread(path)
+        if img is None:
+            raise ValueError(f"Failed to load image: {path}")
         img = cv2.resize(img, (64, 64))  # Đảm bảo đúng size
 
         # Chuẩn hóa về [0, 1] và đổi channel (H, W, C) -> (C, H, W)
