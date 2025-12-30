@@ -1,0 +1,201 @@
+# Football Video Analysis System Configuration
+
+# Detector configuration
+detector:
+  model_path: "runs/train/yolo_football/weights/best.pt"  # Trained custom YOLO model
+  imgsz: 1280  # Input size for YOLO (higher = better for small ball detection)
+  conf_global: 0.2 # Global confidence threshold (before per-class filtering)
+  
+  # Per-class confidence thresholds
+  class_conf:
+    player: 0.25
+    ball: 0.005  # Lowered from 0.08 to detect more balls
+    referee: 0.30
+    goalkeeper: 0.25
+  
+  # NMS IOU thresholds per class
+  nms_iou:
+    people: 0.65  # player, referee, goalkeeper
+    ball: 0.25
+  
+  max_det:
+    people: 150
+    ball: 10
+  
+  # Ball geometry filters (false positive reduction)
+  ball_filters:
+    min_area_px: 8  # Enhanced from 6 to reduce false positives
+    max_area_px: 1200  # Enhanced from 1500 to be more strict
+    aspect_ratio_min: 0.6  # Enhanced from 0.5 for more circular shape
+    aspect_ratio_max: 1.7  # Enhanced from 2.0 for more circular shape
+
+# People tracker configuration (ByteTrack)
+people_tracker:
+  type: "bytetrack"  # or "deepsort"
+  track_high_thresh: 0.25
+  track_low_thresh: 0.10
+  new_track_thresh: 0.25
+  match_thresh: 0.8
+  track_buffer: 30  # frames to keep track alive during occlusion
+  min_box_area: 300  # minimum bbox area to consider
+  min_track_frames: 10  # minimum frames for a valid track
+  frame_rate: 25  # will be overridden by video fps
+
+# Ball tracker configuration (Kalman Filter + Reacquisition)
+ball_tracker:
+  track_buffer: 15  # frames to keep predicting before declaring lost
+  max_displacement_px_per_frame: 80  # motion gating radius
+  gate_radius_scale: 1.5  # multiplier for adaptive gating
+  
+  # Reacquisition strategy when ball is lost
+  reacquire:
+    enabled: false  # DISABLED - no ball prediction
+    roi_scale: 4.0  # ROI size as multiple of last bbox
+    roi_size_px: 320  # fallback fixed ROI size
+    trigger_after_frames: 5  # trigger reacquire after N frames of prediction
+    reacquire_every_n_frames: 3  # frequency of reacquire attempts
+  
+  # Kalman filter parameters
+  kalman:
+    process_noise_pos: 1.0
+    process_noise_vel: 0.1
+    measurement_noise: 10.0
+
+# Team color assignment configuration
+team_color:
+  enabled: true
+  
+  # Jersey ROI cropping ratios (relative to bbox)
+  jersey_crop:
+    x_start: 0.20
+    x_end: 0.80
+    y_start: 0.15
+    y_end: 0.55
+  
+  # Minimum person bbox size to extract color
+  min_person_height_px: 60
+  min_roi_width_px: 20
+  min_roi_height_px: 30
+  
+  # Color extraction
+  color_space: "Lab"  # or "HSV"
+  use_median: true  # use median color vs kmeans
+  
+  # Grass mask (to exclude field pixels)
+  grass_mask:
+    enabled: true
+    h_range: [35, 85]
+    s_min: 60
+    v_min: 40
+  
+  # Dark pixel filtering
+  filter_dark_pixels:
+    enabled: true
+    l_min: 20  # minimum L value in Lab
+  
+  # Clustering for team separation
+  clustering:
+    n_teams: 2
+    warmup_frames: 200
+    min_init_samples: 100
+    centroid_update_beta: 0.01  # slow EMA update for centroids
+  
+  # Per-track temporal smoothing
+  per_track:
+    ema_alpha: 0.2  # color EMA weight
+    vote_window_frames: 30  # majority voting window
+    vote_threshold: 0.6  # minimum vote ratio for stable assignment
+  
+  # Goalkeeper team assignment
+  goalkeeper:
+    method: "neighbor_vote"  # or "side_of_field"
+    min_neighbors: 3
+    neighbor_radius_px: 300
+    vote_threshold: 0.5
+
+# Possession analysis configuration
+possession:
+  enabled: true
+  possession_radius_px: 150  # distance to consider player has ball
+  min_frames_for_possession: 5  # frames before counting as stable possession
+  smoothing_window_frames: 15  # temporal smoothing window
+  
+  # Pass detection
+  pass_detection_enabled: true
+  min_pass_distance_px: 200  # minimum distance for valid pass
+  max_pass_duration_frames: 50  # max frames between possessions for pass
+
+# Renderer configuration
+render:
+  # Layer toggles
+  layers_enabled:
+    player: true
+    ball: true
+    referee: true
+    goalkeeper: true
+  
+  # Colors (BGR format)
+  colors:
+    team0: [0, 255, 0]      # Green
+    team1: [255, 0, 0]      # Blue
+    referee: [0, 165, 255]  # Orange
+    goalkeeper: [255, 255, 0]  # Cyan
+    ball_detected: [0, 255, 255]  # Yellow
+    ball_predicted: [128, 128, 128]  # Gray
+    ball_lost: [0, 0, 255]  # Red
+    unknown: [255, 255, 255]  # White
+  
+  # Drawing options
+  draw_track_id: true
+  draw_team_id: true
+  draw_confidence: false
+  bbox_thickness: 2
+  text_scale: 0.6
+  text_thickness: 2
+  
+  # Ball rendering
+  ball_radius: 8
+  ball_trail_length: 10  # number of past positions to draw
+
+# Logger configuration
+logger:
+  export_formats:
+    - "jsonl"  # frames.jsonl (per-frame)
+    - "csv"    # tracks.csv (track-level)
+    - "json"   # meta.json (metadata)
+  
+  # Debug output
+  debug:
+    enabled: false
+    save_jersey_crops: false
+    save_ball_roi: false
+    save_field_mask: false
+    max_debug_frames: 100
+
+# Output paths (relative to project root)
+output:
+  videos_dir: "output/videos"
+  logs_dir: "output/logs"
+  debug_dir: "output/debug"
+
+# Presets (override main config for specific use cases)
+presets:
+  fast:
+    detector:
+      imgsz: 640
+    ball_tracker:
+      reacquire:
+        enabled: false
+    team_color:
+      enabled: false
+  
+  accurate:
+    detector:
+      imgsz: 1600
+      class_conf:
+        ball: 0.05
+    ball_tracker:
+      track_buffer: 20
+      reacquire:
+        enabled: true
+        trigger_after_frames: 3

@@ -1,0 +1,163 @@
+# Football Video Analysis System Configuration - CPU Optimized
+
+# Detector configuration
+detector:
+  model_path: "yolo11n.pt"  # Smallest model
+  imgsz: 640  # REDUCED from 1280 for faster CPU inference
+  conf_global: 0.2  # Slightly higher to reduce detections
+  
+  # Per-class confidence thresholds
+  class_conf:
+    player: 0.3  # Higher threshold = less detections = faster
+    ball: 0.1
+    referee: 0.35
+    goalkeeper: 0.3
+  
+  # NMS IOU thresholds per class
+  nms_iou:
+    people: 0.65
+    ball: 0.25
+  
+  max_det:
+    people: 100  # Reduced from 150
+    ball: 5  # Reduced from 10
+  
+  # Ball geometry filters
+  ball_filters:
+    min_area_px: 6
+    max_area_px: 1500
+    aspect_ratio_min: 0.5
+    aspect_ratio_max: 2.0
+
+# People tracker configuration (ByteTrack)
+people_tracker:
+  type: "bytetrack"
+  track_high_thresh: 0.3
+  track_low_thresh: 0.15
+  new_track_thresh: 0.3
+  match_thresh: 0.8
+  track_buffer: 30
+  min_box_area: 300
+  min_track_frames: 10
+  frame_rate: 25
+
+# Ball tracker configuration
+ball_tracker:
+  track_buffer: 15
+  max_displacement_px_per_frame: 80
+  gate_radius_scale: 1.5
+  
+  reacquire:
+    enabled: false  # DISABLED for faster CPU processing
+    roi_scale: 4.0
+    roi_size_px: 320
+    trigger_after_frames: 5
+    reacquire_every_n_frames: 3
+  
+  kalman:
+    process_noise_pos: 1.0
+    process_noise_vel: 0.1
+    measurement_noise: 10.0
+
+# Team color assignment configuration
+team_color:
+  enabled: true
+  
+  jersey_crop:
+    x_start: 0.20
+    x_end: 0.80
+    y_start: 0.15
+    y_end: 0.55
+  
+  min_person_height_px: 60
+  min_roi_width_px: 20
+  min_roi_height_px: 30
+  
+  color_space: "Lab"
+  use_median: true
+  
+  grass_mask:
+    enabled: true
+    h_range: [35, 85]
+    s_min: 60
+    v_min: 40
+  
+  filter_dark_pixels:
+    enabled: true
+    l_min: 20
+  
+  clustering:
+    n_teams: 2
+    warmup_frames: 200
+    min_init_samples: 100
+    centroid_update_beta: 0.01
+  
+  per_track:
+    ema_alpha: 0.2
+    vote_window_frames: 30
+    vote_threshold: 0.6
+  
+  goalkeeper:
+    method: "neighbor_vote"
+    min_neighbors: 3
+    neighbor_radius_px: 300
+    vote_threshold: 0.5
+
+# Possession analysis configuration
+possession:
+  enabled: false  # DISABLED for faster CPU processing
+  possession_radius_px: 150
+  min_frames_for_possession: 5
+  smoothing_window_frames: 15
+  
+  pass_detection_enabled: false
+  min_pass_distance_px: 200
+  max_pass_duration_frames: 50
+
+# Renderer configuration
+render:
+  layers_enabled:
+    player: true
+    ball: true
+    referee: true
+    goalkeeper: true
+  
+  colors:
+    team0: [0, 255, 0]
+    team1: [255, 0, 0]
+    referee: [0, 165, 255]
+    goalkeeper: [255, 255, 0]
+    ball_detected: [0, 255, 255]
+    ball_predicted: [128, 128, 128]
+    ball_lost: [0, 0, 255]
+    unknown: [255, 255, 255]
+  
+  draw_track_id: true
+  draw_team_id: true
+  draw_confidence: false
+  bbox_thickness: 2
+  text_scale: 0.6
+  text_thickness: 2
+  
+  ball_radius: 8
+  ball_trail_length: 10
+
+# Logger configuration
+logger:
+  export_formats:
+    - "jsonl"
+    - "csv"
+    - "json"
+  
+  debug:
+    enabled: false
+    save_jersey_crops: false
+    save_ball_roi: false
+    save_field_mask: false
+    max_debug_frames: 100
+
+# Output configuration
+output:
+  videos_dir: "output/videos"
+  logs_dir: "output/logs"
+  debug_dir: "output/debug"

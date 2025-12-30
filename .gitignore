@@ -1,6 +1,7 @@
 # ============================================================
 # DATASET FILES (Large - Should not be committed)
 # ============================================================
+data/
 SoccerNet/
 input/SoccerNet/
 input/multiclass_dataset/
@@ -12,6 +13,7 @@ Training/tiny_dataset/
 # PYTHON
 # ============================================================
 __pycache__/
+*/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -32,6 +34,17 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# ============================================================
+# TEMPORARY & DEBUG FILES
+# ============================================================
+*.log
+training_log.txt
+debug_*.jpg
+debug_*.png
+test_*.py
+temp/
+tmp/
 
 # ============================================================
 # VIRTUAL ENVIRONMENTS
