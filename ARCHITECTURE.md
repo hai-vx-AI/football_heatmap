@@ -122,6 +122,59 @@ To reduce false positives, ball detections are filtered by:
 ### Overview
 The ball tracking module combines YOLO detections with Kalman Filter-based motion prediction to maintain stable ball trajectories even during occlusions or detection failures.
 
+### What is Kalman Filter?
+
+**Kalman Filter** is a mathematical algorithm that:
+- **Estimates** the true state of a moving object from noisy measurements
+- **Predicts** future positions based on motion models
+- **Fuses** predictions with new observations optimally
+
+**Why Kalman Filter for Ball Tracking?**
+
+| Problem | Kalman Filter Solution |
+|---------|----------------------|
+| **Detection Failures** | Predict ball position when YOLO misses |
+| **Noisy Detections** | Smooth out jittery/inaccurate detections |
+| **Occlusions** | Continue tracking during temporary loss |
+| **Velocity Estimation** | Estimate ball speed from position history |
+| **Real-time Performance** | Extremely fast (no neural network needed) |
+
+**How Kalman Filter Works:**
+
+```
+Step 1: PREDICT (Before seeing new detection)
+├─ Use motion model to predict where ball will be
+├─ Formula: x_predicted = F × x_previous
+└─ Based on: last position + estimated velocity
+
+Step 2: UPDATE (After getting new detection)
+├─ Compare prediction with actual detection
+├─ Compute Kalman Gain: How much to trust new measurement?
+├─ Formula: x_updated = x_predicted + K × (measurement - prediction)
+└─ Result: Optimal fusion of prediction + observation
+
+Step 3: REPEAT
+└─ Use updated state as input for next prediction
+```
+
+**Key Advantages over Pure YOLO:**
+- ✅ **Handles missing detections** (predict during 10-15 frames gap)
+- ✅ **Smoother trajectories** (removes detection jitter)
+- ✅ **Velocity estimation** (YOLO only gives position)
+- ✅ **Real-time speed** (runs at 1000+ FPS)
+- ✅ **No training required** (mathematical model)
+
+**Alternative: LSTM Ball Predictor**
+
+The project also includes an optional **LSTM-based predictor** ([training/train_ball_predictor.py](training/train_ball_predictor.py)) for advanced trajectory prediction:
+
+| Method | Speed | Accuracy | Training | Best For |
+|--------|-------|----------|----------|----------|
+| **Kalman Filter** | ⚡ Very Fast | ✅ Good | ❌ None | Real-time tracking, short gaps |
+| **LSTM Predictor** | 🐢 Slower | ✨ Better | ✅ Required | Long occlusions, complex patterns |
+
+**Current Implementation:** Uses Kalman Filter for optimal real-time performance.
+
 ### How It Works
 
 #### 2.1 Two-Phase Tracking System
@@ -144,27 +197,126 @@ The ball tracking module combines YOLO detections with Kalman Filter-based motio
 ```
 x = [cx, cy, vx, vy]
     ↑    ↑   ↑   ↑
-    |    |   |   └─ velocity_y
-    |    |   └───── velocity_x
-    |    └─────── center_y
-    └────────── center_x
+    |    |   |   └─ velocity_y (pixels/frame)
+    |    |   └───── velocity_x (pixels/frame)
+    |    └─────── center_y (pixel coordinate)
+    └────────── center_x (pixel coordinate)
 ```
 
-**Prediction Equation:**
+**Why track velocity?**
+- Allows prediction when ball not detected
+- Smoother trajectory estimation
+- Can detect sudden changes (kicks, bounces)
+
+**State Transition Matrix F (Constant Velocity Model):**
+
+Assumes ball moves with constant velocity between frames (good approximation for short time intervals).
+
 ```
 x(t+1) = F × x(t)
 
-where F = [1  0  dt  0]  # dt = 1/fps (e.g., 0.04s for 25fps)
-          [0  1  0  dt]
-          [0  0  1   0]
-          [0  0  0   1]
+         ┌                    ┐
+         │ 1  0  dt  0       │  ← cx_new = cx_old + vx × dt
+         │ 0  1  0   dt      │  ← cy_new = cy_old + vy × dt
+F =      │ 0  0  1   0       │  ← vx_new = vx_old (constant)
+         │ 0  0  0   1       │  ← vy_new = vy_old (constant)
+         └                    ┘
+
+where dt = 1/fps (time step)
+For 25 fps: dt = 0.04 seconds
 ```
 
-**Measurement Update:**
+**Example Prediction:**
+```python
+# Current state
+cx = 500 px
+cy = 300 px
+vx = 20 px/frame  # moving right
+vy = -10 px/frame # moving up
+
+# Prediction for next frame (dt = 0.04s)
+cx_next = 500 + 20 × 1 = 520 px
+cy_next = 300 + (-10) × 1 = 290 px
+vx_next = 20 px/frame (unchanged)
+vy_next = -10 px/frame (unchanged)
 ```
-z(t) = [cx, cy]  # Observed ball center from YOLO
-x(t) = x(t|t-1) + K × (z(t) - H × x(t|t-1))
+
+**Measurement Matrix H:**
+
+We only measure position (cx, cy) from YOLO, not velocity.
+
 ```
+         ┌           ┐
+         │ 1  0  0  0│  ← Measure cx
+H =      │ 0  1  0  0│  ← Measure cy
+         └           ┘
+
+z(t) = H × x(t) = [cx, cy]
+```
+
+**Kalman Update Equation:**
+
+When new YOLO detection arrives, combine prediction with measurement:
+
+```
+Innovation = z(t) - H × x_predicted(t)  # Difference between detection and prediction
+K = Kalman Gain  # How much to tr Effect |
+|-----------|---------|---------|--------|
+| `track_buffer` | Max frames to keep predicting | 15 | Higher = track longer during occlusion |
+| `max_displacement_px_per_frame` | Motion gating radius | 80 px | Max ball speed (2000 px/sec at 25fps) |
+| `gate_radius_scale` | Search radius multiplier | 1.5x | Tolerance for prediction error |
+| `process_noise_pos` | Position uncertainty (Q) | 1.0 | Higher = trust measurements more |
+| `process_noise_vel` | Velocity uncertainty (Q) | 0.1 | Higher = allow velocity changes |
+| `measurement_noise` | Detection noise (R) | 10.0 | Higher = trust predictions more |
+
+**Tuning Guidelines:**
+
+**For slow-moving ball (passing, rolling):**
+```yaml
+process_noise_pos: 0.5    # Smooth motion
+process_noise_vel: 0.05   # Steady velocity
+measurement_noise: 5.0    # Trust YOLO
+```
+
+**For fast-moving ball (shots, long passes):**
+```yaml
+process_noise_pos: 2.0    # Allow quick position changes
+process_noise_vel: 0.5    # Allow velocity changes
+measurement_noise: 15.0   # YOLO may be inaccurate
+max_displacement_px_per_frame: 120  # Higher speed limit
+```
+
+**For noisy detections:**
+```yaml
+measurement_noise: 20.0   # Don't trust YOLO too much
+track_buffer: 20          # Predict longer during gaps
+``` are YOLO detections?)
+
+```
+K ≈ Prediction_Uncertainty / (Prediction_Uncertainty + Measurement_Noise)
+
+If YOLO is accurate (low R):  K → 1 (trust measurement more)
+If YOLO is noisy (high R):    K → 0 (trust prediction more)
+```
+
+**Noise Covariance Matrices:**
+
+```python
+# Process Noise Q (motion model uncertainty)
+Q = diag([q_pos, q_pos, q_vel, q_vel])
+q_pos = 1.0   # Position uncertainty (pixels²)
+q_vel = 0.1   # Velocity uncertainty (pixels²/frame²)
+
+# Measurement Noise R (YOLO detection uncertainty)
+R = diag([r, r])
+r = 10.0  # Detection noise (pixels²)
+```
+
+**Physical Interpretation:**
+- **Q large**: Ball motion is unpredictable (quick kicks, bounces)
+- **Q small**: Ball follows smooth trajectory (rolling, passing)
+- **R large**: YOLO detections are noisy (trust predictions more)
+- **R small**: YOLO detections are accurate (trust measurements more)
 
 #### 2.3 Tracking Pipeline
 
